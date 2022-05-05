@@ -1,0 +1,14 @@
+/* MainWindow {
+    background-color: #cec024; 
+} */
+
+DisassView {
+    background-color: #11101c; 
+    color: red;
+}
+
+
+DumpView {
+    background-color: #11101c; 
+    color: red;
+}
