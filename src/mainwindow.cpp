@@ -1,20 +1,25 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
 #include "CPUView.h"
+#include "MAPView.h"
 #include "iostream"
 #include <QSplitter>
 #include <QTcpSocket>
 #include <cstdint>
 #include <cstring>
 #include <qdebug.h>
+#include <qglobal.h>
 #include <string>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
     socketClient_ = new QTcpSocket;
+
     disassView = new DisassView;
     dumpView = new DumpView;
+    regsView = new RegsView;
+    mapView = new MapView;
 
     auto splitter_middle = new QSplitter(Qt::Orientation::Vertical);
     auto splitter_top = new QSplitter(Qt::Orientation::Horizontal);
@@ -27,14 +32,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     splitter_middle->setStretchFactor(1, 2);
 
     splitter_top->addWidget(disassView);
-    splitter_top->addWidget(new QListView);
+    splitter_top->addWidget(regsView);
     splitter_top->setStretchFactor(0, 10);
-    splitter_top->setStretchFactor(1, 2);
+    splitter_top->setStretchFactor(1, 4);
 
     splitter_bottom->addWidget(dumpView);
     splitter_bottom->addWidget(new QListView);
     splitter_bottom->setStretchFactor(0, 10);
-    splitter_bottom->setStretchFactor(1, 2);
+    splitter_bottom->setStretchFactor(1, 4);
+
+    ui->map_layout->addWidget(mapView);
 }
 
 MainWindow::~MainWindow()
@@ -106,10 +113,18 @@ void MainWindow::socketHandle()
         if (strcmp(tag.data(), "regs") == 0)
         {
             memcpy(&mRegs, body_p, sizeof(pt_regs));
+            regsView->setRegs(mRegs);
+            regsView->setDebugFlag(true);
+            regsView->viewport()->update();
         }
         else if (strcmp(tag.data(), "cpu") == 0)
         {
             updateDissView(body_p);
+        }
+        else if (strcmp(tag.data(), "maps") == 0)
+        {
+            auto maps = QString::fromStdString(std::string((char *)body_p, std::stoi(len)));
+            mapView->setMap(maps);
         }
         handle_len += 20;
         handle_len += std::stoi(len);

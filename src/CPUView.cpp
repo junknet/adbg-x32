@@ -1,11 +1,14 @@
 #include "CPUView.h"
+#include "mainwindow.h"
 #include <QAbstractScrollArea>
 #include <QBrush>
 #include <QPainter>
 #include <QScrollBar>
 #include <boost/range/irange.hpp>
 #include <capstone.h>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <qcolor.h>
 #include <qnamespace.h>
 
@@ -157,4 +160,41 @@ void DumpView::setDebugFlag(bool flag)
 void DumpView::setStartAddr(uint32_t addr)
 {
     startAddr_ = addr;
+}
+
+RegsView::RegsView(QWidget *parent) : QAbstractScrollArea()
+{
+    auto font = QFont("FiraCode", 8);
+    auto metrics = QFontMetrics(font);
+    fontWidth_ = metrics.horizontalAdvance('X');
+    fontHeight_ = metrics.height();
+    QAbstractScrollArea::setFont(font);
+}
+
+void RegsView::setRegs(pt_regs reg)
+{
+    mRegs_ = reg;
+}
+
+void RegsView::setDebugFlag(bool flag)
+{
+    debuged = flag;
+}
+
+void RegsView::paintEvent(QPaintEvent *event)
+{
+    if (!debuged)
+    {
+        return;
+    }
+    QPainter painter(viewport());
+    auto line = 0;
+    uint32_t *value_p = (uint32_t *)&mRegs_;
+    for (auto reg_name : regsName_)
+    {
+        painter.drawText(0, line * fontHeight_, reg_name.length() * fontWidth_, fontHeight_, 0, reg_name);
+        auto value = QString("%1").arg(*(value_p + line), 8, 16, QLatin1Char('0'));
+        painter.drawText(fontWidth_ * 4, line * fontHeight_, value.length() * fontWidth_, fontHeight_, 0, value);
+        line++;
+    }
 }

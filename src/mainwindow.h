@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include "CPUView.h"
+#include "MAPView.h"
 #include <QListView>
 #include <QMainWindow>
 #include <QTcpSocket>
@@ -9,28 +10,6 @@
 #include <qglobal.h>
 #include <qlistview.h>
 #include <qtcpsocket.h>
-
-struct pt_regs
-{
-    uint32_t r0;
-    uint32_t r1;
-    uint32_t r2;
-    uint32_t r3;
-    uint32_t r4;
-    uint32_t r5;
-    uint32_t r6;
-    uint32_t r7;
-    uint32_t r8;
-    uint32_t r9;
-    uint32_t r10;
-    uint32_t r11;
-    uint32_t r12;
-    uint32_t sp;
-    uint32_t lr;
-    uint32_t pc;
-    uint32_t cpsr;
-    uint32_t orig_r0;
-};
 
 QT_BEGIN_NAMESPACE
 namespace Ui
@@ -71,8 +50,10 @@ class MainWindow : public QMainWindow
   private:
     Ui::MainWindow *ui;
     QTcpSocket *socketClient_;
+    pt_regs mRegs;
     DisassView *disassView;
     DumpView *dumpView;
-    pt_regs mRegs;
+    RegsView *regsView;
+    MapView *mapView;
 };
 #endif // MAINWINDOW_H
