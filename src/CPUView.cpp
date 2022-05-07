@@ -79,7 +79,7 @@ void DisassView::paintEvent(QPaintEvent *event)
         }
 
         row = i * fontHeight_;
-        auto addr = QString("0x%1").arg(insn[i + offset].address, 8, 16, QLatin1Char('0'));
+        auto addr = QString("%1").arg(insn[i + offset].address, 8, 16, QLatin1Char('0'));
         painter.drawText(0, row, addr.length() * fontWidth_, fontHeight_, Qt::AlignTop, addr);
 
         auto mnemonic = QString(insn[i + offset].mnemonic);
@@ -126,7 +126,7 @@ void DumpView::paintEvent(QPaintEvent *event)
     for (auto line : boost::irange(0, max_line))
     {
         QString print_text;
-        auto addr = QString("0x%1").arg(startAddr_ + offset + line * 16, 8, 16, QLatin1Char('0'));
+        auto addr = QString("%1").arg(startAddr_ + offset + line * 16, 8, 16, QLatin1Char('0'));
         painter.drawText(0, line * fontHeight_, addr.length() * fontWidth_, fontHeight_, 0, addr);
         for (auto i : boost::irange(0, 16))
         {
@@ -197,4 +197,64 @@ void RegsView::paintEvent(QPaintEvent *event)
         painter.drawText(fontWidth_ * 4, line * fontHeight_, value.length() * fontWidth_, fontHeight_, 0, value);
         line++;
     }
+}
+
+StackView::StackView(QWidget *parent) : QAbstractScrollArea()
+{
+    auto font = QFont("FiraCode", 8);
+    auto metrics = QFontMetrics(font);
+    fontWidth_ = metrics.horizontalAdvance('X');
+    fontHeight_ = metrics.height();
+    QAbstractScrollArea::setFont(font);
+    verticalScrollBar()->setMaximum(maxLine_);
+}
+
+void StackView::paintEvent(QPaintEvent *event)
+{
+    if (!debuged)
+    {
+        return;
+    }
+
+    QSize areaSize = viewport()->size();
+    auto offset = verticalScrollBar()->value() * 4;
+    auto max_line = areaSize.height() / fontHeight_ + 1;
+
+    QPainter painter(viewport());
+    for (auto line : boost::irange(0, max_line))
+    {
+        QString print_text;
+        auto addr = QString("%1").arg(startAddr_ + offset + line * 4, 8, 16, QLatin1Char('0'));
+        painter.drawText(0, line * fontHeight_, addr.length() * fontWidth_, fontHeight_, 0, addr);
+        auto byte_data = *(uint32_t *)&data[offset + line * 4];
+        auto value = QString("%1").arg(byte_data, 8, 16, QLatin1Char('0'));
+        painter.drawText(fontWidth_ * 10, line * fontHeight_, value.length() * fontWidth_, fontHeight_, 0, value);
+    }
+    // painter.setPen(QPen(QColor(106, 255, 124)));
+    // auto line = fontWidth_ * 11;
+    // auto step = fontWidth_ * 4 * 3;
+    // for (auto i : boost::irange(0, 5))
+    // {
+    //     auto step_line = line + i * step;
+    //     if (i > 0)
+    //     {
+    //         step_line += fontWidth_ * 0.5;
+    //     }
+    //     painter.drawLine(step_line, 0, step_line, areaSize.height());
+    // }
+}
+
+void StackView::setSpValue(uint32_t value)
+{
+    spValue_ = value;
+}
+
+void StackView::setStartAddr(uint32_t addr)
+{
+    startAddr_ = addr;
+}
+
+void StackView::setDebugFlag(bool flag)
+{
+    debuged = flag;
 }

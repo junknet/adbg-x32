@@ -1,6 +1,7 @@
 #pragma once
 #include <QAbstractScrollArea>
 #include <capstone.h>
+#include <cstdint>
 #include <qlist.h>
 
 struct pt_regs
@@ -105,6 +106,30 @@ class RegsView : public QAbstractScrollArea
     int fontHeight_ = 0;
     pt_regs mRegs_;
     bool debuged = false;
-    const QList<QString> regsName_ = {"r0", "r1",  "r2",  "r3",  "r4", "r5", "r6", "r7",   "r8",
-                                      "r9", "r10", "r11", "r12", "sp", "lr", "pc", "cpsr", "orig_r0"};
+    const QList<QString> regsName_ = {"r0", "r1", "r2",  "r3",  "r4",  "r5", "r6", "r7",
+                                      "r8", "r9", "r10", "r11", "r12", "sp", "lr", "pc"};
+};
+
+class StackView : public QAbstractScrollArea
+{
+    Q_OBJECT
+
+  public:
+    explicit StackView(QWidget *parent = nullptr);
+    ~StackView() override = default;
+
+    void paintEvent(QPaintEvent *event) override;
+    void setSpValue(uint32_t value);
+    void setStartAddr(uint32_t addr);
+    void setDebugFlag(bool flag);
+
+    uint8_t data[0x3000];
+
+  private:
+    int fontWidth_ = 0;
+    int fontHeight_ = 0;
+    bool debuged = false;
+    int maxLine_ = 0x3000 / 4;
+    uint32_t startAddr_;
+    uint32_t spValue_;
 };

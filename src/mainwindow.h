@@ -55,5 +55,6 @@ class MainWindow : public QMainWindow
     DumpView *dumpView;
     RegsView *regsView;
     MapView *mapView;
+    StackView *stackView;
 };
 #endif // MAINWINDOW_H

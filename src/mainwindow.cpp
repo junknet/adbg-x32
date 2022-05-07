@@ -20,6 +20,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     dumpView = new DumpView;
     regsView = new RegsView;
     mapView = new MapView;
+    stackView = new StackView;
 
     auto splitter_middle = new QSplitter(Qt::Orientation::Vertical);
     auto splitter_top = new QSplitter(Qt::Orientation::Horizontal);
@@ -37,7 +38,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     splitter_top->setStretchFactor(1, 4);
 
     splitter_bottom->addWidget(dumpView);
-    splitter_bottom->addWidget(new QListView);
+    splitter_bottom->addWidget(stackView);
     splitter_bottom->setStretchFactor(0, 10);
     splitter_bottom->setStretchFactor(1, 4);
 
@@ -125,6 +126,14 @@ void MainWindow::socketHandle()
         {
             auto maps = QString::fromStdString(std::string((char *)body_p, std::stoi(len)));
             mapView->setMap(maps);
+        }
+        else if (strcmp(tag.data(), "stack") == 0)
+        {
+            memcpy(stackView->data, body_p, 0x3000);
+            stackView->setDebugFlag(true);
+            stackView->setSpValue(mRegs.sp);
+            stackView->setStartAddr(mRegs.sp & ~0xfff - 0x1000);
+            stackView->viewport()->update();
         }
         handle_len += 20;
         handle_len += std::stoi(len);
