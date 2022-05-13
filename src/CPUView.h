@@ -39,7 +39,7 @@ class DisassView : public QAbstractScrollArea
 
     void disassInstr();
     void setCurrentPc(uint32_t addr);
-
+    void setDebugFlag(bool flag);
     uint8_t data[0x3000];
 
   private:
@@ -50,6 +50,8 @@ class DisassView : public QAbstractScrollArea
     int line2_ = 0;
     int line3_ = 0;
     int lineWidth_ = 2;
+
+    bool debuged = false;
 
     csh handle;
     cs_insn *insn = nullptr;
@@ -106,8 +108,9 @@ class RegsView : public QAbstractScrollArea
     int fontHeight_ = 0;
     pt_regs mRegs_;
     bool debuged = false;
-    const QList<QString> regsName_ = {"r0", "r1", "r2",  "r3",  "r4",  "r5", "r6", "r7",
-                                      "r8", "r9", "r10", "r11", "r12", "sp", "lr", "pc"};
+    QList<QString> regsName_ = {"r0", "r1", "r2",  "r3",  "r4",  "r5", "r6", "r7",
+                                "r8", "r9", "r10", "r11", "r12", "sp", "lr", "pc"};
+    QList<QString> regFlag_ = {"N", "Z", "C", "V", "Q"};
 };
 
 class StackView : public QAbstractScrollArea

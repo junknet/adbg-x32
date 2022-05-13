@@ -44,6 +44,8 @@ class MainWindow : public QMainWindow
 
     void socketHandle();
 
+    void socketClose();
+
   private:
     void updateDissView(uint8_t *addr);
 

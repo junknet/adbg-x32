@@ -10,12 +10,13 @@
 #include <qdebug.h>
 #include <qglobal.h>
 #include <string>
+#include <type_traits>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    resize(1000, 800);
     socketClient_ = new QTcpSocket;
-
     disassView = new DisassView;
     dumpView = new DumpView;
     regsView = new RegsView;
@@ -43,6 +44,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     splitter_bottom->setStretchFactor(1, 4);
 
     ui->map_layout->addWidget(mapView);
+
+    ui->tabWidget->setCurrentIndex(0);
 }
 
 MainWindow::~MainWindow()
@@ -59,6 +62,7 @@ void MainWindow::on_actionopen_triggered()
         return;
     }
     connect(socketClient_, SIGNAL(readyRead()), this, SLOT(socketHandle()));
+    connect(socketClient_, SIGNAL(disconnected()), this, SLOT(socketClose()));
 }
 
 void MainWindow::on_actioncontinue_triggered()
@@ -140,9 +144,23 @@ void MainWindow::socketHandle()
     }
 }
 
+void MainWindow::socketClose()
+{
+    // clear all cpuview
+    disassView->setDebugFlag(false);
+    disassView->viewport()->update();
+    dumpView->setDebugFlag(false);
+    dumpView->viewport()->update();
+    regsView->setDebugFlag(false);
+    regsView->viewport()->update();
+    stackView->setDebugFlag(false);
+    stackView->viewport()->update();
+}
+
 void MainWindow::updateDissView(uint8_t *addr)
 {
     memcpy(disassView->data, addr, 0x3000);
+    disassView->setDebugFlag(true);
     disassView->setCurrentPc(mRegs.pc);
     disassView->disassInstr();
     disassView->viewport()->update();

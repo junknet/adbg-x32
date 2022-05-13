@@ -49,8 +49,17 @@ void DisassView::setCurrentPc(uint32_t addr)
     currentPc_ = addr;
 }
 
+void DisassView::setDebugFlag(bool flag)
+{
+    debuged = flag;
+}
+
 void DisassView::paintEvent(QPaintEvent *event)
 {
+    if (!debuged)
+    {
+        return;
+    }
     QSize areaSize = viewport()->size();
 
     auto offset = verticalScrollBar()->value();
@@ -154,7 +163,7 @@ void DumpView::paintEvent(QPaintEvent *event)
 }
 void DumpView::setDebugFlag(bool flag)
 {
-    debuged = true;
+    debuged = flag;
 }
 
 void DumpView::setStartAddr(uint32_t addr)
@@ -192,9 +201,24 @@ void RegsView::paintEvent(QPaintEvent *event)
     uint32_t *value_p = (uint32_t *)&mRegs_;
     for (auto reg_name : regsName_)
     {
+        if (line == 13)
+        {
+            line += 2;
+        }
         painter.drawText(0, line * fontHeight_, reg_name.length() * fontWidth_, fontHeight_, 0, reg_name);
         auto value = QString("%1").arg(*(value_p + line), 8, 16, QLatin1Char('0'));
         painter.drawText(fontWidth_ * 4, line * fontHeight_, value.length() * fontWidth_, fontHeight_, 0, value);
+        line++;
+    }
+
+    line += 2;
+    auto index = 0;
+    for (auto flag_name : regFlag_)
+    {
+        painter.drawText(0, line * fontHeight_, flag_name.length() * fontWidth_, fontHeight_, 0, flag_name);
+        auto value = QString("%1").arg((mRegs_.cpsr >> (31 - index)) & 1);
+        painter.drawText(fontWidth_ * 4, line * fontHeight_, value.length() * fontWidth_, fontHeight_, 0, value);
+        index++;
         line++;
     }
 }
