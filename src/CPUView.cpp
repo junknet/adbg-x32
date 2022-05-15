@@ -2,6 +2,9 @@
 #include "mainwindow.h"
 #include <QAbstractScrollArea>
 #include <QBrush>
+#include <QDateTime>
+#include <QInputDialog>
+#include <QKeyEvent>
 #include <QPainter>
 #include <QScrollBar>
 #include <boost/range/irange.hpp>
@@ -10,6 +13,8 @@
 #include <cstdio>
 #include <cstring>
 #include <qcolor.h>
+#include <qdatetime.h>
+#include <qdebug.h>
 #include <qnamespace.h>
 
 DisassView::DisassView(QWidget *parent) : QAbstractScrollArea()
@@ -19,26 +24,53 @@ DisassView::DisassView(QWidget *parent) : QAbstractScrollArea()
     fontWidth_ = metrics.horizontalAdvance('X');
     fontHeight_ = metrics.height();
     QAbstractScrollArea::setFont(font);
-    line1_ = fontWidth_ * 15;
-    line2_ = fontWidth_ * 25;
 
-    cs_open(CS_ARCH_ARM, CS_MODE_THUMB, &handle);
-    cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
+    line1_ = fontWidth_ * line1_space;
+    line2_ = line1_ + fontWidth_ * line2_space;
+    line3_ = line2_ + fontWidth_ * line3_space;
+
+    lineWidth_ = fontWidth_;
+
+    cs_open(CS_ARCH_ARM, CS_MODE_THUMB, &handle_thumb);
+    cs_open(CS_ARCH_ARM, CS_MODE_ARM, &handle_arm);
+    cs_option(handle_thumb, CS_OPT_SKIPDATA, CS_OPT_ON);
+    cs_option(handle_arm, CS_OPT_SKIPDATA, CS_OPT_ON);
 
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
 }
-
 void DisassView::disassInstr()
 {
     cs_free(insn, count);
-    count = cs_disasm(handle, data, 0x3000, currentPc_ & ~0xfff - 0x1000, 0, &insn);
-    verticalScrollBar()->setMaximum(count);
-    printf("pc:%x\n", currentPc_);
+    if (currentPc_ & 1)
+    {
+        count = cs_disasm(handle_thumb, data, 0x400, startAddr_, 0, &insn);
+    }
+    else
+    {
+        count = cs_disasm(handle_arm, data, 0x400, startAddr_, 0, &insn);
+    }
+    disStartAddr = insn[0].address;
+    disEndAddr = insn[count - 1].address;
+    verticalScrollBar()->setMaximum(count - verticalScrollBar()->pageStep());
+
+    if (jump_addr_)
+    {
+        focusAddr = jump_addr_;
+        printf("jump_addr_:%x\n", jump_addr_);
+        jump_addr_ = 0;
+    }
+    else
+    {
+        focusAddr = currentPc_;
+        printf("pc:%x\n", currentPc_);
+    }
     for (auto i : boost::irange(0, count))
     {
-        if (insn[i].address == (currentPc_ & ~0x1))
+        auto ins_addr = insn[i].address;
+        auto delta = ins_addr > focusAddr ? (ins_addr - focusAddr) : (focusAddr - ins_addr);
+        if (delta < 4)
         {
-            verticalScrollBar()->setValue(i - 10);
+            verticalScrollBar()->setValue(i);
             break;
         }
     }
@@ -47,6 +79,12 @@ void DisassView::disassInstr()
 void DisassView::setCurrentPc(uint32_t addr)
 {
     currentPc_ = addr;
+}
+
+void DisassView::setStartAddr(uint32_t addr)
+{
+    startAddr_ = addr;
+    printf("startAddr_:%x\n", startAddr_);
 }
 
 void DisassView::setDebugFlag(bool flag)
@@ -61,45 +99,133 @@ void DisassView::paintEvent(QPaintEvent *event)
         return;
     }
     QSize areaSize = viewport()->size();
-
     auto offset = verticalScrollBar()->value();
-    auto item_count = areaSize.height() / fontHeight_ + 1;
+    auto lines = areaSize.height() / fontHeight_;
+    screenStartAddr = insn[offset].address;
+    screenEndAddr = offset + lines > count ? insn[count - 1].address : insn[offset + lines].address;
+    if (screenStartAddr == disStartAddr)
+    {
+        jumpTo(screenStartAddr);
+    }
+    if (screenEndAddr == disEndAddr)
+    {
+        printf("jumto screenEndAddr:%x\n ", screenEndAddr);
+        jumpTo(screenEndAddr);
+    }
 
     QPainter painter(viewport());
     // painter.setPen(QPen(Qt::blue));
 
-    int row = 0;
-    for (auto i : boost::irange(0, item_count))
+    int line_y = 0;
+    for (auto line : boost::irange(0, lines))
     {
-        if (i + offset >= count)
+        if (line + offset >= count)
         {
             break;
         }
 
-        if (selected_ && selectLine_ - offset == i)
+        line_y = line * fontHeight_;
+        auto line_addr = insn[offset + line].address;
+
+        if (line_addr == currentPc_)
         {
-            painter.save();
-            // painter.setPen(QPen(QColor(150, 55, 70)));
-            auto rect = QRectF(0, i * fontHeight_, areaSize.width(), fontHeight_);
-            auto brush = QBrush(QColor(150, 55, 70));
+            auto rect = QRectF(line1_, line_y, line2_ - line1_, fontHeight_);
+            auto brush = QBrush(pc_bgcolor);
             painter.fillRect(rect, brush);
-            // painter.fillRect(0, 0, areaSize.width(), fontHeight_);
-            painter.restore();
+
+            auto pc_offset = 3;
+            rect = QRectF(fontWidth_ * pc_offset, line_y, fontWidth_ * 2, fontHeight_);
+            brush = QBrush(Qt::blue);
+            painter.fillRect(rect, brush);
+            painter.setPen(Qt::white);
+            painter.drawText(fontWidth_ * pc_offset, line_y, fontWidth_ * 2, fontHeight_, Qt::AlignTop, "PC");
+            painter.setPen(Qt::blue);
+            painter.drawLine(fontWidth_ * (pc_offset + 2), line_y + fontHeight_ / 2, line1_, line_y + fontHeight_ / 2);
+        }
+        if (line_addr == focusAddr)
+        {
+            auto rect = QRectF(line1_, line_y, areaSize.width(), fontHeight_);
+            auto brush = QBrush(focus_color);
+            painter.fillRect(rect, brush);
         }
 
-        row = i * fontHeight_;
-        auto addr = QString("%1").arg(insn[i + offset].address, 8, 16, QLatin1Char('0'));
-        painter.drawText(0, row, addr.length() * fontWidth_, fontHeight_, Qt::AlignTop, addr);
+        auto addr = QString("%1").arg(line_addr, 8, 16, QLatin1Char('0'));
+        painter.setPen(addr_color);
+        painter.drawText(line1_ + lineWidth_, line_y, addr.length() * fontWidth_, fontHeight_, Qt::AlignTop, addr);
 
-        auto mnemonic = QString(insn[i + offset].mnemonic);
-        painter.drawText(line1_ + lineWidth_, row, mnemonic.length() * fontWidth_, fontHeight_, Qt::AlignTop, mnemonic);
+        auto mnemonic = QString(insn[line + offset].mnemonic);
+        if (mnemonic.startsWith("b"))
+        {
+            painter.setPen(jump_color);
+        }
+        else if (mnemonic == "push" || mnemonic == "pop")
+        {
+            painter.setPen(func_color);
+        }
+        else
+        {
+            painter.setPen(normal_color);
+        }
+        painter.drawText(line2_ + lineWidth_, line_y, mnemonic.length() * fontWidth_, fontHeight_, Qt::AlignTop,
+                         mnemonic);
+        painter.setPen(normal_color);
 
-        auto op_str = QString(insn[i + offset].op_str);
-        painter.drawText(line2_ + lineWidth_, row, op_str.length() * fontWidth_, fontHeight_, 0, op_str);
+        auto op_str = QString(insn[line + offset].op_str);
+        if (op_str.startsWith("{"))
+        {
+            painter.setPen(bigbrack_color);
+            painter.drawText(line3_ + lineWidth_, line_y, op_str.length() * fontWidth_, fontHeight_, 0, op_str);
+        }
+        else
+        {
+            auto ops = op_str.split(",", Qt::SkipEmptyParts);
+            auto op_pos_x = 0;
+            for (auto &op : ops)
+            {
+                auto op_trim = op.trimmed();
+                painter.setPen(regsName_.contains(op_trim) ? regs_color : normal_color);
+                painter.drawText(line3_ + lineWidth_ * (1 + op_pos_x), line_y, op.length() * fontWidth_, fontHeight_, 0,
+                                 op);
+                op_pos_x += op.length();
+                if (op != ops[ops.length() - 1])
+                {
+                    painter.setPen(Qt::red);
+                    painter.drawText(line3_ + lineWidth_ * (1 + op_pos_x), line_y, fontWidth_, fontHeight_, 0, ",");
+                    op_pos_x++;
+                }
+            }
+        }
     }
-    painter.setPen(QPen(Qt::black));
+
+    painter.setPen(QPen(Qt::red));
     painter.drawLine(line1_, 0, line1_, areaSize.height());
     painter.drawLine(line2_, 0, line2_, areaSize.height());
+    painter.drawLine(line3_, 0, line3_, areaSize.height());
+}
+
+void DisassView::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_G)
+    {
+        QString color_str;
+        auto text = QInputDialog::getText(this, "", "");
+        uint32_t addr = text.toUInt(nullptr, 16);
+        if (!addr)
+        {
+            qDebug() << "addr toUInt error!";
+            return;
+        }
+        jumpTo(addr);
+    }
+}
+
+void DisassView::jumpTo(uint32_t addr)
+{
+    jump_addr_ = addr;
+    char msg[5];
+    msg[0] = MSG_CPU;
+    *(uint32_t *)(msg + 1) = addr;
+    socketClient_->write(msg, 5);
 }
 
 DumpView::DumpView(QWidget *parent) : QAbstractScrollArea()
@@ -198,7 +324,8 @@ void RegsView::paintEvent(QPaintEvent *event)
     }
     QPainter painter(viewport());
     auto line = 0;
-    uint32_t *value_p = (uint32_t *)&mRegs_;
+    auto reg_index = 0;
+    uint32_t *reg_p = (uint32_t *)&mRegs_;
     for (auto reg_name : regsName_)
     {
         if (line == 13)
@@ -206,9 +333,10 @@ void RegsView::paintEvent(QPaintEvent *event)
             line += 2;
         }
         painter.drawText(0, line * fontHeight_, reg_name.length() * fontWidth_, fontHeight_, 0, reg_name);
-        auto value = QString("%1").arg(*(value_p + line), 8, 16, QLatin1Char('0'));
+        auto value = QString("%1").arg(*(reg_p + reg_index), 8, 16, QLatin1Char('0'));
         painter.drawText(fontWidth_ * 4, line * fontHeight_, value.length() * fontWidth_, fontHeight_, 0, value);
         line++;
+        reg_index++;
     }
 
     line += 2;

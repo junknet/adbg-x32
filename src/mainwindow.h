@@ -58,5 +58,6 @@ class MainWindow : public QMainWindow
     RegsView *regsView;
     MapView *mapView;
     StackView *stackView;
+    char msgBuff_[5];
 };
 #endif // MAINWINDOW_H

@@ -6,6 +6,7 @@
 #include <QSplitter>
 #include <QTcpSocket>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <qdebug.h>
 #include <qglobal.h>
@@ -18,6 +19,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     resize(1000, 800);
     socketClient_ = new QTcpSocket;
     disassView = new DisassView;
+    disassView->socketClient_ = socketClient_;
     dumpView = new DumpView;
     regsView = new RegsView;
     mapView = new MapView;
@@ -61,18 +63,23 @@ void MainWindow::on_actionopen_triggered()
         qDebug() << "errr";
         return;
     }
+    //  set debug target process name
+    socketClient_->write("com.example.jnitest");
+
     connect(socketClient_, SIGNAL(readyRead()), this, SLOT(socketHandle()));
     connect(socketClient_, SIGNAL(disconnected()), this, SLOT(socketClose()));
 }
 
 void MainWindow::on_actioncontinue_triggered()
 {
-    socketClient_->write("continue");
+    msgBuff_[0] = MSG_CONTINUE;
+    socketClient_->write(msgBuff_, 1);
 }
 
 void MainWindow::on_actionstop_triggered()
 {
-    socketClient_->write("stop");
+    msgBuff_[0] = MSG_STOP;
+    socketClient_->write(msgBuff_, 1);
 }
 
 void MainWindow::on_actionmaps_triggered()
@@ -104,44 +111,74 @@ void MainWindow::on_tabWidget_tabBarClicked(int index)
 void MainWindow::socketHandle()
 {
     auto data = socketClient_->readAll();
-    auto recive_total = data.length();
-    qDebug() << "recive socket handle!! len: " << recive_total;
-
-    auto handle_len = 0;
-    while (handle_len + 20 < recive_total)
+    auto total_n = data.length();
+    qDebug() << "recive socket handle!! len: " << total_n;
+    if (total_n == 0)
     {
-        auto tag = std::string(data.data() + handle_len, 10);
-        auto len = std::string(data.data() + handle_len + 10, 10);
-        std::cout << "tag: " << tag << " len: " << len << std::endl;
-        auto body_p = (uint8_t *)data.data() + handle_len + 20;
-
-        if (strcmp(tag.data(), "regs") == 0)
+        return;
+    }
+    auto handle_n = 0;
+    while (handle_n < total_n)
+    {
+        switch (data[handle_n])
         {
-            memcpy(&mRegs, body_p, sizeof(pt_regs));
+        case MSG_REGS:
+            memcpy(&mRegs, data.data() + 1, sizeof(pt_regs));
             regsView->setRegs(mRegs);
             regsView->setDebugFlag(true);
             regsView->viewport()->update();
+            handle_n = handle_n + 1 + sizeof(pt_regs);
+            break;
+        case MSG_CPU:
+            disassView->setStartAddr(*(uint32_t *)(data.data() + handle_n + 1));
+            memcpy(disassView->data, data.data() + handle_n + 5, 0x400);
+            disassView->setDebugFlag(true);
+            disassView->setCurrentPc(mRegs.pc);
+            disassView->disassInstr();
+            disassView->viewport()->update();
+            handle_n += 0x406;
+            break;
+        default:
+            qDebug() << "no handle msg " << data[0];
+            return;
         }
-        else if (strcmp(tag.data(), "cpu") == 0)
-        {
-            updateDissView(body_p);
-        }
-        else if (strcmp(tag.data(), "maps") == 0)
-        {
-            auto maps = QString::fromStdString(std::string((char *)body_p, std::stoi(len)));
-            mapView->setMap(maps);
-        }
-        else if (strcmp(tag.data(), "stack") == 0)
-        {
-            memcpy(stackView->data, body_p, 0x3000);
-            stackView->setDebugFlag(true);
-            stackView->setSpValue(mRegs.sp);
-            stackView->setStartAddr(mRegs.sp & ~0xfff - 0x1000);
-            stackView->viewport()->update();
-        }
-        handle_len += 20;
-        handle_len += std::stoi(len);
     }
+
+    // auto handle_len = 0;
+    // while (handle_len + 20 < recive_total)
+    // {
+    //     auto tag = std::string(data.data() + handle_len, 10);
+    //     auto len = std::string(data.data() + handle_len + 10, 10);
+    //     std::cout << "tag: " << tag << " len: " << len << std::endl;
+    //     auto body_p = (uint8_t *)data.data() + handle_len + 20;
+
+    //     if (strcmp(tag.data(), "regs") == 0)
+    //     {
+    //         memcpy(&mRegs, body_p, sizeof(pt_regs));
+    //         regsView->setRegs(mRegs);
+    //         regsView->setDebugFlag(true);
+    //         regsView->viewport()->update();
+    //     }
+    //     else if (strcmp(tag.data(), "cpu") == 0)
+    //     {
+    //         updateDissView(body_p);
+    //     }
+    //     else if (strcmp(tag.data(), "maps") == 0)
+    //     {
+    //         auto maps = QString::fromStdString(std::string((char *)body_p, std::stoi(len)));
+    //         mapView->setMap(maps);
+    //     }
+    //     else if (strcmp(tag.data(), "stack") == 0)
+    //     {
+    //         memcpy(stackView->data, body_p, 0x3000);
+    //         stackView->setDebugFlag(true);
+    //         stackView->setSpValue(mRegs.sp);
+    //         stackView->setStartAddr(mRegs.sp & ~0xfff - 0x1000);
+    //         stackView->viewport()->update();
+    //     }
+    //     handle_len += 20;
+    //     handle_len += std::stoi(len);
+    // }
 }
 
 void MainWindow::socketClose()
@@ -156,7 +193,6 @@ void MainWindow::socketClose()
     stackView->setDebugFlag(false);
     stackView->viewport()->update();
 }
-
 void MainWindow::updateDissView(uint8_t *addr)
 {
     memcpy(disassView->data, addr, 0x3000);
