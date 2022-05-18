@@ -41,7 +41,7 @@ DisassView::DisassView(QWidget *parent) : QAbstractScrollArea()
 void DisassView::disassInstr()
 {
     cs_free(insn, count);
-    if (currentPc_ & 1)
+    if (isThumbMode())
     {
         count = cs_disasm(handle_thumb, data, 0x400, startAddr_, 0, &insn);
     }
@@ -51,23 +51,25 @@ void DisassView::disassInstr()
     }
     disStartAddr = insn[0].address;
     disEndAddr = insn[count - 1].address;
-    verticalScrollBar()->setMaximum(count - verticalScrollBar()->pageStep());
+    auto maxvalue = count - viewport()->size().height() / fontHeight_;
+    verticalScrollBar()->setMaximum(maxvalue);
 
+    uint32_t to_addr;
     if (jump_addr_)
     {
-        focusAddr = jump_addr_;
+        to_addr = jump_addr_;
         printf("jump_addr_:%x\n", jump_addr_);
         jump_addr_ = 0;
     }
     else
     {
-        focusAddr = currentPc_;
-        printf("pc:%x\n", currentPc_);
+        to_addr = PC_;
+        // printf("pc:%x\n", PC_);
     }
     for (auto i : boost::irange(0, count))
     {
         auto ins_addr = insn[i].address;
-        auto delta = ins_addr > focusAddr ? (ins_addr - focusAddr) : (focusAddr - ins_addr);
+        auto delta = ins_addr > to_addr ? (ins_addr - to_addr) : (to_addr - ins_addr);
         if (delta < 4)
         {
             verticalScrollBar()->setValue(i);
@@ -76,9 +78,32 @@ void DisassView::disassInstr()
     }
 }
 
+bool DisassView::isThumbMode()
+{
+    return (CPSR_ >> 5) & 1;
+}
+
 void DisassView::setCurrentPc(uint32_t addr)
 {
-    currentPc_ = addr;
+    PC_ = addr;
+    printf("currentPC:%x\n", PC_);
+    if (count)
+    {
+        printf("start:%lx\n", insn[0].address);
+        printf("end:%lx\n", insn[count - 1].address);
+        if (PC_ < insn[0].address || PC_ > insn[count - 1].address)
+        {
+            char msgBuff[5];
+            msgBuff[0] = MSG_CPU;
+            *(uint32_t *)(msgBuff + 1) = PC_;
+            socketClient_->write(msgBuff, 5);
+        }
+    }
+}
+
+void DisassView::setCurrentCPSR(uint32_t value)
+{
+    CPSR_ = value;
 }
 
 void DisassView::setStartAddr(uint32_t addr)
@@ -98,19 +123,16 @@ void DisassView::paintEvent(QPaintEvent *event)
     {
         return;
     }
+
     QSize areaSize = viewport()->size();
     auto offset = verticalScrollBar()->value();
     auto lines = areaSize.height() / fontHeight_;
     screenStartAddr = insn[offset].address;
-    screenEndAddr = offset + lines > count ? insn[count - 1].address : insn[offset + lines].address;
-    if (screenStartAddr == disStartAddr)
+    screenEndAddr = offset + lines >= count ? insn[count - 1].address : insn[offset + lines].address;
+    if (screenStartAddr == disStartAddr || screenEndAddr == disEndAddr)
     {
         jumpTo(screenStartAddr);
-    }
-    if (screenEndAddr == disEndAddr)
-    {
-        printf("jumto screenEndAddr:%x\n ", screenEndAddr);
-        jumpTo(screenEndAddr);
+        return;
     }
 
     QPainter painter(viewport());
@@ -127,7 +149,7 @@ void DisassView::paintEvent(QPaintEvent *event)
         line_y = line * fontHeight_;
         auto line_addr = insn[offset + line].address;
 
-        if (line_addr == currentPc_)
+        if (line_addr == PC_)
         {
             auto rect = QRectF(line1_, line_y, line2_ - line1_, fontHeight_);
             auto brush = QBrush(pc_bgcolor);
@@ -203,6 +225,17 @@ void DisassView::paintEvent(QPaintEvent *event)
     painter.drawLine(line3_, 0, line3_, areaSize.height());
 }
 
+void DisassView::mousePressEvent(QMouseEvent *event)
+{
+    if (!debuged)
+    {
+        return;
+    }
+    focusAddr = insn[verticalScrollBar()->value() + event->pos().y() / fontHeight_].address;
+    printf("focusAddr:%x\n", focusAddr);
+    viewport()->update();
+}
+
 void DisassView::keyPressEvent(QKeyEvent *event)
 {
     if (event->key() == Qt::Key_G)
@@ -217,6 +250,12 @@ void DisassView::keyPressEvent(QKeyEvent *event)
         }
         jumpTo(addr);
     }
+}
+
+void DisassView::resizeEvent(QResizeEvent *)
+{
+    auto maxvalue = count - viewport()->size().height() / fontHeight_;
+    verticalScrollBar()->setMaximum(maxvalue);
 }
 
 void DisassView::jumpTo(uint32_t addr)

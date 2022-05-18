@@ -16,6 +16,7 @@
 #define MSG_STACK 5
 #define MSG_DUMP 6
 #define MSG_CPU 7
+#define MSG_STEP 8
 
 struct pt_regs
 {
@@ -48,12 +49,16 @@ class DisassView : public QAbstractScrollArea
 
     // protected:
     void paintEvent(QPaintEvent *event) override;
-    // void mousePressEvent(QMouseEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
+    void resizeEvent(QResizeEvent *) override;
+
     void jumpTo(uint32_t addr);
 
     void disassInstr();
-    void setCurrentPc(uint32_t addr);
+    bool isThumbMode();
+    void setCurrentPc(uint32_t value);
+    void setCurrentCPSR(uint32_t value);
     void setStartAddr(uint32_t addr);
     void setDebugFlag(bool flag);
     uint8_t data[0x400];
@@ -74,6 +79,7 @@ class DisassView : public QAbstractScrollArea
 
     int lineWidth_ = 0;
     bool debuged = false;
+    bool screenScrolled = false;
 
     csh handle_thumb;
     csh handle_arm;
@@ -82,7 +88,8 @@ class DisassView : public QAbstractScrollArea
     bool selected_ = false;
     int selectLine_ = 0;
 
-    uint32_t currentPc_;
+    uint32_t PC_;
+    uint32_t CPSR_;
     uint32_t startAddr_;
     uint32_t focusAddr;
     uint32_t screenStartAddr;

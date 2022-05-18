@@ -2,16 +2,13 @@
 #include "./ui_mainwindow.h"
 #include "CPUView.h"
 #include "MAPView.h"
-#include "iostream"
+#include <QShortcut>
 #include <QSplitter>
 #include <QTcpSocket>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
 #include <qdebug.h>
-#include <qglobal.h>
+#include <qobjectdefs.h>
+#include <qshortcut.h>
 #include <string>
-#include <type_traits>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow)
 {
@@ -48,6 +45,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     ui->map_layout->addWidget(mapView);
 
     ui->tabWidget->setCurrentIndex(0);
+
+    QShortcut *step_button = new QShortcut(this);
+    step_button->setKey(tr("f2"));
+    step_button->setAutoRepeat(false);
+    connect(step_button, SIGNAL(activated()), this, SLOT(send_step()));
 }
 
 MainWindow::~MainWindow()
@@ -92,6 +94,13 @@ void MainWindow::on_actionclose_triggered()
     socketClient_->close();
 }
 
+void MainWindow::send_step()
+{
+    qDebug() << "command step";
+    msgBuff_[0] = MSG_STEP;
+    socketClient_->write(msgBuff_, 1);
+}
+
 void MainWindow::on_actionregs_triggered()
 {
 }
@@ -110,75 +119,42 @@ void MainWindow::on_tabWidget_tabBarClicked(int index)
 
 void MainWindow::socketHandle()
 {
-    auto data = socketClient_->readAll();
-    auto total_n = data.length();
-    qDebug() << "recive socket handle!! len: " << total_n;
-    if (total_n == 0)
+    uint8_t msg;
+    QByteArray data;
+    while ((msg = getMsg()))
     {
-        return;
-    }
-    auto handle_n = 0;
-    while (handle_n < total_n)
-    {
-        switch (data[handle_n])
+        switch (msg)
         {
         case MSG_REGS:
-            memcpy(&mRegs, data.data() + 1, sizeof(pt_regs));
+            data = getDataN(sizeof(pt_regs));
+            memcpy(&mRegs, data.data(), sizeof(pt_regs));
             regsView->setRegs(mRegs);
             regsView->setDebugFlag(true);
             regsView->viewport()->update();
-            handle_n = handle_n + 1 + sizeof(pt_regs);
+
+            disassView->setCurrentPc(mRegs.pc);
+            disassView->setCurrentCPSR(mRegs.cpsr);
+            disassView->viewport()->update();
             break;
         case MSG_CPU:
-            disassView->setStartAddr(*(uint32_t *)(data.data() + handle_n + 1));
-            memcpy(disassView->data, data.data() + handle_n + 5, 0x400);
+            disassView->setStartAddr(getData4());
+            data = getDataN(0x400);
+            memcpy(disassView->data, data.data(), 0x400);
             disassView->setDebugFlag(true);
-            disassView->setCurrentPc(mRegs.pc);
             disassView->disassInstr();
             disassView->viewport()->update();
-            handle_n += 0x406;
             break;
+        case MSG_MAPS: {
+            data = getDataN(getData4());
+            auto map_str = QString(data);
+            mapView->setMap(map_str);
+            break;
+        }
         default:
-            qDebug() << "no handle msg " << data[0];
+            qDebug() << "no handle msg : " << msg;
             return;
         }
     }
-
-    // auto handle_len = 0;
-    // while (handle_len + 20 < recive_total)
-    // {
-    //     auto tag = std::string(data.data() + handle_len, 10);
-    //     auto len = std::string(data.data() + handle_len + 10, 10);
-    //     std::cout << "tag: " << tag << " len: " << len << std::endl;
-    //     auto body_p = (uint8_t *)data.data() + handle_len + 20;
-
-    //     if (strcmp(tag.data(), "regs") == 0)
-    //     {
-    //         memcpy(&mRegs, body_p, sizeof(pt_regs));
-    //         regsView->setRegs(mRegs);
-    //         regsView->setDebugFlag(true);
-    //         regsView->viewport()->update();
-    //     }
-    //     else if (strcmp(tag.data(), "cpu") == 0)
-    //     {
-    //         updateDissView(body_p);
-    //     }
-    //     else if (strcmp(tag.data(), "maps") == 0)
-    //     {
-    //         auto maps = QString::fromStdString(std::string((char *)body_p, std::stoi(len)));
-    //         mapView->setMap(maps);
-    //     }
-    //     else if (strcmp(tag.data(), "stack") == 0)
-    //     {
-    //         memcpy(stackView->data, body_p, 0x3000);
-    //         stackView->setDebugFlag(true);
-    //         stackView->setSpValue(mRegs.sp);
-    //         stackView->setStartAddr(mRegs.sp & ~0xfff - 0x1000);
-    //         stackView->viewport()->update();
-    //     }
-    //     handle_len += 20;
-    //     handle_len += std::stoi(len);
-    // }
 }
 
 void MainWindow::socketClose()
@@ -193,16 +169,38 @@ void MainWindow::socketClose()
     stackView->setDebugFlag(false);
     stackView->viewport()->update();
 }
-void MainWindow::updateDissView(uint8_t *addr)
-{
-    memcpy(disassView->data, addr, 0x3000);
-    disassView->setDebugFlag(true);
-    disassView->setCurrentPc(mRegs.pc);
-    disassView->disassInstr();
-    disassView->viewport()->update();
 
-    memcpy(dumpView->data, addr, 0x3000);
-    dumpView->setDebugFlag(true);
-    dumpView->setStartAddr(mRegs.pc & ~0xfff - 0x1000);
-    dumpView->viewport()->update();
+uint8_t MainWindow::getMsg()
+{
+    auto data = socketClient_->read(1);
+    if (data.length() == 0)
+    {
+        return 0;
+    }
+    else
+    {
+        return data[0];
+    }
+}
+
+uint32_t MainWindow::getData4()
+{
+    auto data = socketClient_->read(4);
+    return *(uint32_t *)data.data();
+}
+
+QByteArray MainWindow::getDataN(int n)
+{
+
+    auto recive_len = 0;
+    QByteArray data;
+    while (true)
+    {
+        data.append(socketClient_->read(n - data.length()));
+        if (data.length() == n)
+        {
+            return data;
+        }
+        socketClient_->waitForReadyRead();
+    }
 }

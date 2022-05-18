@@ -42,12 +42,16 @@ class MainWindow : public QMainWindow
 
     void on_actionclose_triggered();
 
+    void send_step();
+
     void socketHandle();
 
     void socketClose();
 
   private:
-    void updateDissView(uint8_t *addr);
+    uint8_t getMsg();
+    uint32_t getData4();
+    QByteArray getDataN(int n);
 
   private:
     Ui::MainWindow *ui;
