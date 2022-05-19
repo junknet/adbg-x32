@@ -152,13 +152,16 @@ class RegsView : public QAbstractScrollArea
     void setDebugFlag(bool flag);
 
   private:
+    bool debuged = false;
     int fontWidth_ = 0;
     int fontHeight_ = 0;
-    pt_regs mRegs_;
-    bool debuged = false;
+    pt_regs lastRegs_;
+    pt_regs currentRegs_;
+    QList<int> regChanged;
+    QList<int> flagChanged;
     QList<QString> regsName_ = {"r0", "r1", "r2",  "r3",  "r4",  "r5", "r6", "r7",
                                 "r8", "r9", "r10", "r11", "r12", "sp", "lr", "pc"};
-    QList<QString> regFlag_ = {"N", "Z", "C", "V", "Q"};
+    QList<QString> flagName_ = {"N", "Z", "C", "V", "Q"};
 };
 
 class StackView : public QAbstractScrollArea

@@ -347,9 +347,31 @@ RegsView::RegsView(QWidget *parent) : QAbstractScrollArea()
 
 void RegsView::setRegs(pt_regs reg)
 {
-    mRegs_ = reg;
-}
+    currentRegs_ = reg;
+    auto *current_p = (uint32_t *)&currentRegs_;
+    auto *last_p = (uint32_t *)&lastRegs_;
+    regChanged.clear();
+    flagChanged.clear();
 
+    for (int i = 0; i < sizeof(pt_regs) / (sizeof(uint32_t)); i++)
+    {
+        if (*(current_p + i) != *(last_p + i))
+        {
+            regChanged.push_back(i);
+        }
+    }
+
+    for (int i = 0; i < flagName_.size(); i++)
+    {
+        auto c_flag = (currentRegs_.cpsr >> (31 - i)) & 1;
+        auto l_flag = (lastRegs_.cpsr >> (31 - i)) & 1;
+        if (c_flag != l_flag)
+        {
+            flagChanged.push_back(i);
+        }
+    }
+    lastRegs_ = currentRegs_;
+}
 void RegsView::setDebugFlag(bool flag)
 {
     debuged = flag;
@@ -364,7 +386,7 @@ void RegsView::paintEvent(QPaintEvent *event)
     QPainter painter(viewport());
     auto line = 0;
     auto reg_index = 0;
-    uint32_t *reg_p = (uint32_t *)&mRegs_;
+    uint32_t *reg_p = (uint32_t *)&currentRegs_;
     for (auto reg_name : regsName_)
     {
         if (line == 13)
@@ -372,20 +394,39 @@ void RegsView::paintEvent(QPaintEvent *event)
             line += 2;
         }
         painter.drawText(0, line * fontHeight_, reg_name.length() * fontWidth_, fontHeight_, 0, reg_name);
-        auto value = QString("%1").arg(*(reg_p + reg_index), 8, 16, QLatin1Char('0'));
-        painter.drawText(fontWidth_ * 4, line * fontHeight_, value.length() * fontWidth_, fontHeight_, 0, value);
+        auto reg_value = QString("%1").arg(*(reg_p + reg_index), 8, 16, QLatin1Char('0'));
+
+        // draw reg_value
+        painter.save();
+        if (regChanged.contains(reg_index))
+        {
+            painter.setPen(Qt::red);
+        }
+        painter.drawText(fontWidth_ * 4, line * fontHeight_, reg_value.length() * fontWidth_, fontHeight_, 0,
+                         reg_value);
+        painter.restore();
+
         line++;
         reg_index++;
     }
 
     line += 2;
-    auto index = 0;
-    for (auto flag_name : regFlag_)
+    auto flag_index = 0;
+    for (auto flag_name : flagName_)
     {
         painter.drawText(0, line * fontHeight_, flag_name.length() * fontWidth_, fontHeight_, 0, flag_name);
-        auto value = QString("%1").arg((mRegs_.cpsr >> (31 - index)) & 1);
-        painter.drawText(fontWidth_ * 4, line * fontHeight_, value.length() * fontWidth_, fontHeight_, 0, value);
-        index++;
+
+        painter.save();
+        if (flagChanged.contains(flag_index))
+        {
+            painter.setPen(Qt::red);
+        }
+        auto flag_value = QString("%1").arg((currentRegs_.cpsr >> (31 - flag_index)) & 1);
+        painter.drawText(fontWidth_ * 4, line * fontHeight_, flag_value.length() * fontWidth_, fontHeight_, 0,
+                         flag_value);
+        painter.restore();
+
+        flag_index++;
         line++;
     }
 }
