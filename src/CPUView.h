@@ -39,7 +39,6 @@ struct pt_regs
     uint32_t cpsr;
     uint32_t orig_r0;
 };
-
 class DisassView : public QAbstractScrollArea
 {
     Q_OBJECT
@@ -66,6 +65,7 @@ class DisassView : public QAbstractScrollArea
     uint32_t jump_addr_ = 0;
 
   private:
+    bool forceThumbMode_;
     int fontWidth_ = 0;
     int fontHeight_ = 0;
 
@@ -88,7 +88,7 @@ class DisassView : public QAbstractScrollArea
     bool selected_ = false;
     int selectLine_ = 0;
 
-    uint32_t PC_;
+    uint32_t pcValue_;
     uint32_t CPSR_;
     uint32_t startAddr_;
     uint32_t focusAddr;

@@ -41,7 +41,19 @@ DisassView::DisassView(QWidget *parent) : QAbstractScrollArea()
 void DisassView::disassInstr()
 {
     cs_free(insn, count);
-    if (isThumbMode())
+    bool thumb_mode;
+
+    if (startAddr_ < pcValue_ - 0x200 || startAddr_ > pcValue_ + 0x200)
+    {
+        thumb_mode = forceThumbMode_;
+    }
+    else
+    {
+
+        thumb_mode = isThumbMode();
+    }
+
+    if (thumb_mode)
     {
         count = cs_disasm(handle_thumb, data, 0x400, startAddr_, 0, &insn);
     }
@@ -63,7 +75,7 @@ void DisassView::disassInstr()
     }
     else
     {
-        to_addr = PC_;
+        to_addr = pcValue_;
         // printf("pc:%x\n", PC_);
     }
     for (auto i : boost::irange(0, count))
@@ -85,17 +97,17 @@ bool DisassView::isThumbMode()
 
 void DisassView::setCurrentPc(uint32_t addr)
 {
-    PC_ = addr;
-    printf("currentPC:%x\n", PC_);
+    pcValue_ = addr;
+    printf("currentPC:%x\n", pcValue_);
     if (count)
     {
         printf("start:%lx\n", insn[0].address);
         printf("end:%lx\n", insn[count - 1].address);
-        if (PC_ < insn[0].address || PC_ > insn[count - 1].address)
+        if (pcValue_ < insn[0].address || pcValue_ > insn[count - 1].address)
         {
             char msgBuff[5];
             msgBuff[0] = MSG_CPU;
-            *(uint32_t *)(msgBuff + 1) = PC_;
+            *(uint32_t *)(msgBuff + 1) = pcValue_;
             socketClient_->write(msgBuff, 5);
         }
     }
@@ -149,7 +161,7 @@ void DisassView::paintEvent(QPaintEvent *event)
         line_y = line * fontHeight_;
         auto line_addr = insn[offset + line].address;
 
-        if (line_addr == PC_)
+        if (line_addr == pcValue_)
         {
             auto rect = QRectF(line1_, line_y, line2_ - line1_, fontHeight_);
             auto brush = QBrush(pc_bgcolor);
@@ -249,6 +261,21 @@ void DisassView::keyPressEvent(QKeyEvent *event)
             return;
         }
         jumpTo(addr);
+    }
+    else if (event->key() == Qt::Key_E)
+    {
+        forceThumbMode_ = !forceThumbMode_;
+        disassInstr();
+        viewport()->update();
+        if (forceThumbMode_)
+        {
+            qDebug() << "forceThumbMode_";
+        }
+        else
+        {
+            qDebug() << "forceThumbMode_ false";
+        }
+        qDebug() << "E down!";
     }
 }
 
