@@ -42,11 +42,15 @@ class MainWindow : public QMainWindow
 
     void on_actionclose_triggered();
 
-    void send_step();
-
     void socketHandle();
 
     void socketClose();
+
+    void msg_cpu_slot(uint32_t addr);
+
+    void msg_step_slot();
+    void msg_add_bp_slot();
+    void msg_del_bp_slot();
 
   private:
     uint8_t getMsg();

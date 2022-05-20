@@ -20,6 +20,7 @@ link_directories(${CAPSTONE_LIBRARY_DIRS})
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(Qt6 REQUIRED COMPONENTS Network)
+find_package(fmt)
 
 
 file(GLOB SRC ./src/*.cpp)
@@ -41,3 +42,4 @@ qt_add_executable(adbg
 target_link_libraries(adbg PRIVATE Qt6::Widgets)
 target_link_libraries(adbg PRIVATE Qt6::Network)
 target_link_libraries(adbg PRIVATE ${CAPSTONE_LIBRARIES})
+target_link_libraries(adbg PRIVATE fmt::fmt)

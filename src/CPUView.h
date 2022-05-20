@@ -6,7 +6,6 @@
 
 #include <QAbstractScrollArea>
 #include <QColor>
-#include <QTcpSocket>
 #include <cstdint>
 
 #define MSG_STOP 1
@@ -17,6 +16,8 @@
 #define MSG_DUMP 6
 #define MSG_CPU 7
 #define MSG_STEP 8
+#define MSG_ADD_BP 9
+#define MSG_DEL_BP 10
 
 struct pt_regs
 {
@@ -60,12 +61,20 @@ class DisassView : public QAbstractScrollArea
     void setCurrentCPSR(uint32_t value);
     void setStartAddr(uint32_t addr);
     void setDebugFlag(bool flag);
+
     uint8_t data[0x400];
-    QTcpSocket *socketClient_;
     uint32_t jump_addr_ = 0;
+    uint32_t focusAddr;
+    QList<uint32_t> bpList_;
+
+  signals:
+    void msg_cpu_sig(uint32_t addr);
+    // void msg_add_bp_sig(uint32_t addr);
+    // void msg_del_bp_sig(uint32_t addr);
 
   private:
-    bool forceThumbMode_;
+    bool forceModeChange_ = false;
+    bool forceThumbMode_ = true;
     int fontWidth_ = 0;
     int fontHeight_ = 0;
 
@@ -91,7 +100,6 @@ class DisassView : public QAbstractScrollArea
     uint32_t pcValue_;
     uint32_t CPSR_;
     uint32_t startAddr_;
-    uint32_t focusAddr;
     uint32_t screenStartAddr;
     uint32_t screenEndAddr;
     uint32_t disStartAddr;

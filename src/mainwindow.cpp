@@ -2,9 +2,11 @@
 #include "./ui_mainwindow.h"
 #include "CPUView.h"
 #include "MAPView.h"
+#include "log.h"
 #include <QShortcut>
 #include <QSplitter>
 #include <QTcpSocket>
+#include <cstdint>
 #include <qdebug.h>
 #include <qobjectdefs.h>
 #include <qshortcut.h>
@@ -16,7 +18,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     resize(1000, 800);
     socketClient_ = new QTcpSocket;
     disassView = new DisassView;
-    disassView->socketClient_ = socketClient_;
     dumpView = new DumpView;
     regsView = new RegsView;
     mapView = new MapView;
@@ -46,10 +47,23 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     ui->tabWidget->setCurrentIndex(0);
 
+    connect(disassView, SIGNAL(msg_cpu_sig(uint32_t)), this, SLOT(msg_cpu_slot(uint32_t)));
+
     QShortcut *step_button = new QShortcut(this);
-    step_button->setKey(tr("f2"));
+    step_button->setKey(tr("f3"));
     step_button->setAutoRepeat(false);
-    connect(step_button, SIGNAL(activated()), this, SLOT(send_step()));
+
+    QShortcut *add_bp_button = new QShortcut(this);
+    add_bp_button->setKey(tr("f2"));
+    add_bp_button->setAutoRepeat(false);
+
+    QShortcut *del_bp_button = new QShortcut(this);
+    del_bp_button->setKey(tr("f7"));
+    del_bp_button->setAutoRepeat(false);
+
+    connect(step_button, SIGNAL(activated()), this, SLOT(msg_step_slot()));
+    connect(add_bp_button, SIGNAL(activated()), this, SLOT(msg_add_bp_slot()));
+    connect(del_bp_button, SIGNAL(activated()), this, SLOT(msg_del_bp_slot()));
 }
 
 MainWindow::~MainWindow()
@@ -94,11 +108,49 @@ void MainWindow::on_actionclose_triggered()
     socketClient_->close();
 }
 
-void MainWindow::send_step()
+void MainWindow::msg_step_slot()
 {
-    qDebug() << "command step";
     msgBuff_[0] = MSG_STEP;
     socketClient_->write(msgBuff_, 1);
+}
+
+void MainWindow::msg_cpu_slot(uint32_t addr)
+{
+    msgBuff_[0] = MSG_CPU;
+    *(uint32_t *)(msgBuff_ + 1) = addr;
+    socketClient_->write(msgBuff_, 5);
+}
+
+void MainWindow::msg_add_bp_slot()
+{
+    uint32_t bp_addr = disassView->focusAddr & (~1);
+    if (!disassView->bpList_.contains(bp_addr))
+    {
+        disassView->bpList_.append(bp_addr);
+        msgBuff_[0] = MSG_ADD_BP;
+        *(uint32_t *)(msgBuff_ + 1) = bp_addr;
+        socketClient_->write(msgBuff_, 5);
+    }
+    else
+    {
+        qDebug() << "bp is exited!";
+    }
+}
+
+void MainWindow::msg_del_bp_slot()
+{
+    auto bp_addr = disassView->focusAddr;
+    if (disassView->bpList_.contains(bp_addr))
+    {
+        disassView->bpList_.remove(bp_addr);
+        msgBuff_[0] = MSG_DEL_BP;
+        *(uint32_t *)(msgBuff_ + 1) = disassView->focusAddr;
+        socketClient_->write(msgBuff_, 5);
+    }
+    else
+    {
+        qDebug() << "bp not in bplist!";
+    }
 }
 
 void MainWindow::on_actionregs_triggered()
@@ -162,6 +214,7 @@ void MainWindow::socketClose()
     // clear all cpuview
     disassView->setDebugFlag(false);
     disassView->viewport()->update();
+    disassView->bpList_.clear();
     dumpView->setDebugFlag(false);
     dumpView->viewport()->update();
     regsView->setDebugFlag(false);

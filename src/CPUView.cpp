@@ -1,4 +1,5 @@
 #include "CPUView.h"
+#include "log.h"
 #include "mainwindow.h"
 #include <QAbstractScrollArea>
 #include <QBrush>
@@ -16,6 +17,7 @@
 #include <qdatetime.h>
 #include <qdebug.h>
 #include <qnamespace.h>
+#include <qtmetamacros.h>
 
 DisassView::DisassView(QWidget *parent) : QAbstractScrollArea()
 {
@@ -43,14 +45,26 @@ void DisassView::disassInstr()
     cs_free(insn, count);
     bool thumb_mode;
 
-    if (startAddr_ < pcValue_ - 0x200 || startAddr_ > pcValue_ + 0x200)
+    thumb_mode = isThumbMode();
+    //  跳转到第一行地址
+    uint32_t to_addr;
+    if (jump_addr_)
     {
-        thumb_mode = forceThumbMode_;
+        to_addr = jump_addr_;
+        printf("jump_addr_:%x\n", jump_addr_);
+        jump_addr_ = 0;
     }
     else
     {
+        to_addr = pcValue_;
+    }
 
-        thumb_mode = isThumbMode();
+    if (forceModeChange_)
+    {
+        thumb_mode = forceThumbMode_;
+        to_addr = startAddr_ + 0x200;
+        focusAddr = to_addr;
+        forceModeChange_ = false;
     }
 
     if (thumb_mode)
@@ -66,23 +80,11 @@ void DisassView::disassInstr()
     auto maxvalue = count - viewport()->size().height() / fontHeight_;
     verticalScrollBar()->setMaximum(maxvalue);
 
-    uint32_t to_addr;
-    if (jump_addr_)
-    {
-        to_addr = jump_addr_;
-        printf("jump_addr_:%x\n", jump_addr_);
-        jump_addr_ = 0;
-    }
-    else
-    {
-        to_addr = pcValue_;
-        // printf("pc:%x\n", PC_);
-    }
     for (auto i : boost::irange(0, count))
     {
         auto ins_addr = insn[i].address;
         auto delta = ins_addr > to_addr ? (ins_addr - to_addr) : (to_addr - ins_addr);
-        if (delta < 4)
+        if (delta < 2)
         {
             verticalScrollBar()->setValue(i);
             break;
@@ -98,17 +100,16 @@ bool DisassView::isThumbMode()
 void DisassView::setCurrentPc(uint32_t addr)
 {
     pcValue_ = addr;
-    printf("currentPC:%x\n", pcValue_);
+    focusAddr = pcValue_;
+    logd("currentPC: 0x{:x}", pcValue_);
     if (count)
     {
-        printf("start:%lx\n", insn[0].address);
-        printf("end:%lx\n", insn[count - 1].address);
+        // logd("start: 0x{:x}", insn[0].address);
+        // logd("end: 0x{:x}", insn[count - 1].address);
         if (pcValue_ < insn[0].address || pcValue_ > insn[count - 1].address)
         {
-            char msgBuff[5];
-            msgBuff[0] = MSG_CPU;
-            *(uint32_t *)(msgBuff + 1) = pcValue_;
-            socketClient_->write(msgBuff, 5);
+            emit msg_cpu_sig(addr);
+            logd("msg_cpu_sig: 0x{:x}", addr);
         }
     }
 }
@@ -121,7 +122,7 @@ void DisassView::setCurrentCPSR(uint32_t value)
 void DisassView::setStartAddr(uint32_t addr)
 {
     startAddr_ = addr;
-    printf("startAddr_:%x\n", startAddr_);
+    logd("set startAddr_: 0x{:x}", startAddr_);
 }
 
 void DisassView::setDebugFlag(bool flag)
@@ -161,15 +162,28 @@ void DisassView::paintEvent(QPaintEvent *event)
         line_y = line * fontHeight_;
         auto line_addr = insn[offset + line].address;
 
-        if (line_addr == pcValue_)
+        //  断点指令用红色染色
+        if (bpList_.contains(line_addr))
         {
             auto rect = QRectF(line1_, line_y, line2_ - line1_, fontHeight_);
-            auto brush = QBrush(pc_bgcolor);
+            auto brush = QBrush(Qt::red);
             painter.fillRect(rect, brush);
+        }
 
+        if (line_addr == pcValue_)
+        {
+
+            if (!bpList_.contains(line_addr))
+            {
+                auto rect = QRectF(line1_, line_y, line2_ - line1_, fontHeight_);
+                auto brush = QBrush(pc_bgcolor);
+                painter.fillRect(rect, brush);
+            }
+
+            //  画出PC指示箭头
             auto pc_offset = 3;
-            rect = QRectF(fontWidth_ * pc_offset, line_y, fontWidth_ * 2, fontHeight_);
-            brush = QBrush(Qt::blue);
+            auto rect = QRectF(fontWidth_ * pc_offset, line_y, fontWidth_ * 2, fontHeight_);
+            auto brush = QBrush(Qt::blue);
             painter.fillRect(rect, brush);
             painter.setPen(Qt::white);
             painter.drawText(fontWidth_ * pc_offset, line_y, fontWidth_ * 2, fontHeight_, Qt::AlignTop, "PC");
@@ -244,7 +258,7 @@ void DisassView::mousePressEvent(QMouseEvent *event)
         return;
     }
     focusAddr = insn[verticalScrollBar()->value() + event->pos().y() / fontHeight_].address;
-    printf("focusAddr:%x\n", focusAddr);
+    logd("focusAddr: 0x{:x}", focusAddr);
     viewport()->update();
 }
 
@@ -260,11 +274,15 @@ void DisassView::keyPressEvent(QKeyEvent *event)
             qDebug() << "addr toUInt error!";
             return;
         }
+        forceModeChange_ = true;
         jumpTo(addr);
     }
     else if (event->key() == Qt::Key_E)
     {
+
+        forceModeChange_ = true;
         forceThumbMode_ = !forceThumbMode_;
+        qDebug() << "forceThumbMode_:" << forceThumbMode_;
         disassInstr();
         viewport()->update();
         if (forceThumbMode_)
@@ -287,11 +305,8 @@ void DisassView::resizeEvent(QResizeEvent *)
 
 void DisassView::jumpTo(uint32_t addr)
 {
-    jump_addr_ = addr;
-    char msg[5];
-    msg[0] = MSG_CPU;
-    *(uint32_t *)(msg + 1) = addr;
-    socketClient_->write(msg, 5);
+    jump_addr_ = addr & (~1);
+    emit msg_cpu_sig(jump_addr_);
 }
 
 DumpView::DumpView(QWidget *parent) : QAbstractScrollArea()
