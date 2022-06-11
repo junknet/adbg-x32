@@ -132,10 +132,15 @@ class DumpView : public QAbstractScrollArea
 
     // protected:
     void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void keyPressEvent(QKeyEvent *event) override;
     void setDebugFlag(bool flag);
     void setStartAddr(uint32_t addr);
 
     uint8_t data[0x400];
+
+  signals:
+    void msg_dump_sig(uint32_t addr);
 
   private:
     int fontWidth_ = 0;
@@ -159,6 +164,7 @@ class RegsView : public QAbstractScrollArea
     ~RegsView() override = default;
 
     void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
 
     void setRegs(pt_regs reg);
     void setDebugFlag(bool flag);

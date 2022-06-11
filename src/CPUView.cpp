@@ -2,7 +2,9 @@
 #include "log.h"
 #include "mainwindow.h"
 #include <QAbstractScrollArea>
+#include <QApplication>
 #include <QBrush>
+#include <QClipboard>
 #include <QDateTime>
 #include <QInputDialog>
 #include <QKeyEvent>
@@ -402,9 +404,38 @@ void DumpView::paintEvent(QPaintEvent *event)
         painter.drawLine(step_line, 0, step_line, areaSize.height());
     }
 }
+
+void DumpView::mousePressEvent(QMouseEvent *event)
+{
+    int y = event->pos().y() / fontHeight_;
+    int x = (event->pos().x() / fontWidth_ - 12) / 3;
+    if (x >= 0 && x <= 15)
+    {
+        auto index = (verticalScrollBar()->value() + y) * 16 + x;
+        auto value = *(uint32_t *)&data[index];
+        auto clipboard = QApplication::clipboard();
+        clipboard->setText(QString("0x%1").arg(value, 4, 16, QLatin1Char('0')));
+    }
+}
+void DumpView::keyPressEvent(QKeyEvent *event)
+{
+    auto key = event->key();
+    if (key == Qt::Key_G)
+    {
+        auto text = QInputDialog::getText(this, "", "");
+        uint32_t addr = text.toUInt(nullptr, 16);
+        if (!addr)
+        {
+            qDebug() << "addr toUInt error!";
+            return;
+        }
+        emit msg_dump_sig(addr);
+    }
+}
 void DumpView::setDebugFlag(bool flag)
 {
     debuged = flag;
+    verticalScrollBar()->setValue(0);
 }
 
 void DumpView::setStartAddr(uint32_t addr)
@@ -505,6 +536,22 @@ void RegsView::paintEvent(QPaintEvent *event)
 
         flag_index++;
         line++;
+    }
+}
+
+void RegsView::mousePressEvent(QMouseEvent *event)
+{
+    int y = event->pos().y() / fontHeight_;
+    uint32_t *reg_p = (uint32_t *)&currentRegs_;
+    if (y <= 17)
+    {
+        if (y > 12)
+        {
+            y -= 2;
+        }
+        auto value = *(reg_p + y);
+        auto clipboard = QApplication::clipboard();
+        clipboard->setText(QString("0x%1").arg(value, 4, 16, QLatin1Char('0')));
     }
 }
 
