@@ -58,6 +58,7 @@ class DisassView : public QAbstractScrollArea
     void disassInstr();
     bool isThumbMode();
     void setCurrentPc(uint32_t value);
+    void setProcessPaused(bool status);
     void setCurrentCPSR(uint32_t value);
     void setStartAddr(uint32_t addr);
     void setDebugFlag(bool flag);
@@ -65,6 +66,7 @@ class DisassView : public QAbstractScrollArea
     uint8_t data[0x400];
     uint32_t jump_addr_ = 0;
     uint32_t focusAddr;
+    uint32_t focusIndex_;
     QList<uint32_t> bpList_;
 
   signals:
@@ -90,6 +92,7 @@ class DisassView : public QAbstractScrollArea
     bool debuged = false;
     bool screenScrolled = false;
 
+    bool paused_ = false;
     csh handle_thumb;
     csh handle_arm;
     cs_insn *insn = nullptr;
@@ -112,6 +115,7 @@ class DisassView : public QAbstractScrollArea
     QColor focus_color = QColor("#414141");
     QColor addr_color = QColor("#a77cec");
     QColor pc_bgcolor = QColor("#bfb05100");
+    QColor bp_bgcolor = QColor("#bfff0507");
     QColor bigbrack_color = QColor("#38d9f9");
 
     QList<QString> regsName_ = {"r0", "r1", "r2",  "r3",  "r4", "r5", "r6", "r7",
@@ -131,7 +135,7 @@ class DumpView : public QAbstractScrollArea
     void setDebugFlag(bool flag);
     void setStartAddr(uint32_t addr);
 
-    uint8_t data[0x3000];
+    uint8_t data[0x400];
 
   private:
     int fontWidth_ = 0;
@@ -141,7 +145,7 @@ class DumpView : public QAbstractScrollArea
     int line2_ = 0;
     int line3_ = 0;
     int lineWidth_ = 2;
-    int maxLine_ = 0x3000 / 16;
+    int maxLine_ = 0x400 / 16;
     uint32_t startAddr_;
     bool debuged = false;
 };

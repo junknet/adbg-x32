@@ -1,6 +1,9 @@
 #pragma once
 
+#include <QList>
 #include <QListWidget>
+#include <cstdint>
+#include <qtmetamacros.h>
 
 class MapView : public QListWidget
 {
@@ -10,7 +13,13 @@ class MapView : public QListWidget
     ~MapView() override = default;
 
     void setMap(QString &map);
+    void filterMap(QString &str);
+
+    uint32_t findSoBase(QString so_name);
+  public slots:
+    void onListMailItemClicked(QListWidgetItem *item);
 
   private:
     QString mapStr_;
+    QList<QString> mapList_;
 };

@@ -19,6 +19,7 @@
 #include <qnamespace.h>
 #include <qtmetamacros.h>
 
+#include <QMenu>
 DisassView::DisassView(QWidget *parent) : QAbstractScrollArea()
 {
     auto font = QFont("FiraCode", 8);
@@ -114,6 +115,12 @@ void DisassView::setCurrentPc(uint32_t addr)
     }
 }
 
+void DisassView::setProcessPaused(bool paused)
+{
+    paused_ = paused;
+    viewport()->update();
+}
+
 void DisassView::setCurrentCPSR(uint32_t value)
 {
     CPSR_ = value;
@@ -162,15 +169,23 @@ void DisassView::paintEvent(QPaintEvent *event)
         line_y = line * fontHeight_;
         auto line_addr = insn[offset + line].address;
 
+        // 先画出焦点行底色 背景色有先后顺序
+        if (line_addr == focusAddr)
+        {
+            auto rect = QRectF(line1_, line_y, areaSize.width(), fontHeight_);
+            auto brush = QBrush(focus_color);
+            painter.fillRect(rect, brush);
+        }
+
         //  断点指令用红色染色
         if (bpList_.contains(line_addr))
         {
             auto rect = QRectF(line1_, line_y, line2_ - line1_, fontHeight_);
-            auto brush = QBrush(Qt::red);
+            auto brush = QBrush(bp_bgcolor);
             painter.fillRect(rect, brush);
         }
 
-        if (line_addr == pcValue_)
+        if (line_addr == pcValue_ && paused_)
         {
 
             if (!bpList_.contains(line_addr))
@@ -189,12 +204,6 @@ void DisassView::paintEvent(QPaintEvent *event)
             painter.drawText(fontWidth_ * pc_offset, line_y, fontWidth_ * 2, fontHeight_, Qt::AlignTop, "PC");
             painter.setPen(Qt::blue);
             painter.drawLine(fontWidth_ * (pc_offset + 2), line_y + fontHeight_ / 2, line1_, line_y + fontHeight_ / 2);
-        }
-        if (line_addr == focusAddr)
-        {
-            auto rect = QRectF(line1_, line_y, areaSize.width(), fontHeight_);
-            auto brush = QBrush(focus_color);
-            painter.fillRect(rect, brush);
         }
 
         auto addr = QString("%1").arg(line_addr, 8, 16, QLatin1Char('0'));
@@ -250,21 +259,34 @@ void DisassView::paintEvent(QPaintEvent *event)
     painter.drawLine(line2_, 0, line2_, areaSize.height());
     painter.drawLine(line3_, 0, line3_, areaSize.height());
 }
-
+#include <QMessageBox>
 void DisassView::mousePressEvent(QMouseEvent *event)
 {
+    if (event->button() == Qt::RightButton)
+    {
+        // 弹出一个菜单, 菜单项是 QAction 类型
+        QMenu menu;
+        QAction *act = menu.addAction("C++");
+        connect(act, &QAction::triggered, this, [=]() { QMessageBox::information(this, "title", "您选择的是C++..."); });
+        menu.addAction("Java");
+        menu.addAction("Python");
+        menu.exec(QCursor::pos()); // 右键菜单被模态显示出来了
+    }
+
     if (!debuged)
     {
         return;
     }
-    focusAddr = insn[verticalScrollBar()->value() + event->pos().y() / fontHeight_].address;
+    focusIndex_ = verticalScrollBar()->value() + event->pos().y() / fontHeight_;
+    focusAddr = insn[focusIndex_].address;
     logd("focusAddr: 0x{:x}", focusAddr);
     viewport()->update();
 }
 
 void DisassView::keyPressEvent(QKeyEvent *event)
 {
-    if (event->key() == Qt::Key_G)
+    auto key = event->key();
+    if (key == Qt::Key_G)
     {
         QString color_str;
         auto text = QInputDialog::getText(this, "", "");
@@ -277,7 +299,7 @@ void DisassView::keyPressEvent(QKeyEvent *event)
         forceModeChange_ = true;
         jumpTo(addr);
     }
-    else if (event->key() == Qt::Key_E)
+    else if (key == Qt::Key_E)
     {
 
         forceModeChange_ = true;
@@ -294,6 +316,18 @@ void DisassView::keyPressEvent(QKeyEvent *event)
             qDebug() << "forceThumbMode_ false";
         }
         qDebug() << "E down!";
+    }
+    else if (key == Qt::Key_Down)
+    {
+        focusAddr = insn[focusIndex_ + 1].address;
+        focusIndex_++;
+        viewport()->update();
+    }
+    else if (key == Qt::Key_Up)
+    {
+        focusAddr = insn[focusIndex_ - 1].address;
+        focusIndex_--;
+        viewport()->update();
     }
 }
 
@@ -376,6 +410,7 @@ void DumpView::setDebugFlag(bool flag)
 void DumpView::setStartAddr(uint32_t addr)
 {
     startAddr_ = addr;
+    logd("{:x}", addr);
 }
 
 RegsView::RegsView(QWidget *parent) : QAbstractScrollArea()

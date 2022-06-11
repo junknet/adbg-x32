@@ -7,6 +7,7 @@
 #include <QSplitter>
 #include <QTcpSocket>
 #include <cstdint>
+#include <math.h>
 #include <qdebug.h>
 #include <qobjectdefs.h>
 #include <qshortcut.h>
@@ -53,17 +54,17 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     step_button->setKey(tr("f3"));
     step_button->setAutoRepeat(false);
 
-    QShortcut *add_bp_button = new QShortcut(this);
-    add_bp_button->setKey(tr("f2"));
-    add_bp_button->setAutoRepeat(false);
+    QShortcut *bp_button = new QShortcut(this);
+    bp_button->setKey(tr("f2"));
+    bp_button->setAutoRepeat(false);
 
-    QShortcut *del_bp_button = new QShortcut(this);
-    del_bp_button->setKey(tr("f7"));
-    del_bp_button->setAutoRepeat(false);
+    // QShortcut *del_bp_button = new QShortcut(this);
+    // del_bp_button->setKey(tr("f7"));
+    // del_bp_button->setAutoRepeat(false);
 
     connect(step_button, SIGNAL(activated()), this, SLOT(msg_step_slot()));
-    connect(add_bp_button, SIGNAL(activated()), this, SLOT(msg_add_bp_slot()));
-    connect(del_bp_button, SIGNAL(activated()), this, SLOT(msg_del_bp_slot()));
+    connect(bp_button, SIGNAL(activated()), this, SLOT(msg_bp_slot()));
+    // connect(del_bp_button, SIGNAL(activated()), this, SLOT(msg_del_bp_slot()));
 }
 
 MainWindow::~MainWindow()
@@ -90,6 +91,7 @@ void MainWindow::on_actioncontinue_triggered()
 {
     msgBuff_[0] = MSG_CONTINUE;
     socketClient_->write(msgBuff_, 1);
+    disassView->setProcessPaused(false);
 }
 
 void MainWindow::on_actionstop_triggered()
@@ -121,36 +123,24 @@ void MainWindow::msg_cpu_slot(uint32_t addr)
     socketClient_->write(msgBuff_, 5);
 }
 
-void MainWindow::msg_add_bp_slot()
+void MainWindow::msg_bp_slot()
 {
     uint32_t bp_addr = disassView->focusAddr & (~1);
     if (!disassView->bpList_.contains(bp_addr))
     {
         disassView->bpList_.append(bp_addr);
         msgBuff_[0] = MSG_ADD_BP;
-        *(uint32_t *)(msgBuff_ + 1) = bp_addr;
-        socketClient_->write(msgBuff_, 5);
+        logd("add bp addr: {:x}", bp_addr);
     }
     else
     {
-        qDebug() << "bp is exited!";
-    }
-}
-
-void MainWindow::msg_del_bp_slot()
-{
-    auto bp_addr = disassView->focusAddr;
-    if (disassView->bpList_.contains(bp_addr))
-    {
-        disassView->bpList_.remove(bp_addr);
+        disassView->bpList_.removeAll(bp_addr);
         msgBuff_[0] = MSG_DEL_BP;
-        *(uint32_t *)(msgBuff_ + 1) = disassView->focusAddr;
-        socketClient_->write(msgBuff_, 5);
+        logd("del bp addr: {:x}", bp_addr);
     }
-    else
-    {
-        qDebug() << "bp not in bplist!";
-    }
+    *(uint32_t *)(msgBuff_ + 1) = bp_addr;
+    socketClient_->write(msgBuff_, 5);
+    disassView->viewport()->update();
 }
 
 void MainWindow::on_actionregs_triggered()
@@ -162,7 +152,8 @@ void MainWindow::on_tabWidget_tabBarClicked(int index)
     switch (index)
     {
     case 1:
-        socketClient_->write("maps");
+        msgBuff_[0] = MSG_MAPS;
+        socketClient_->write(msgBuff_, 1);
         break;
     default:
         break;
@@ -186,6 +177,7 @@ void MainWindow::socketHandle()
 
             disassView->setCurrentPc(mRegs.pc);
             disassView->setCurrentCPSR(mRegs.cpsr);
+            disassView->setProcessPaused(true);
             disassView->viewport()->update();
             break;
         case MSG_CPU:
@@ -202,6 +194,13 @@ void MainWindow::socketHandle()
             mapView->setMap(map_str);
             break;
         }
+        case MSG_DUMP:
+            dumpView->setStartAddr(getData4());
+            data = getDataN(0x400);
+            memcpy(dumpView->data, data.data(), 0x400);
+            dumpView->setDebugFlag(true);
+            dumpView->viewport()->update();
+            break;
         default:
             qDebug() << "no handle msg : " << msg;
             return;
@@ -256,4 +255,10 @@ QByteArray MainWindow::getDataN(int n)
         }
         socketClient_->waitForReadyRead();
     }
+}
+
+void MainWindow::on_lineEdit_textChanged(const QString &arg1)
+{
+    QString qwe = arg1;
+    mapView->filterMap(qwe);
 }
