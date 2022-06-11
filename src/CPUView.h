@@ -18,6 +18,7 @@
 #define MSG_STEP 8
 #define MSG_ADD_BP 9
 #define MSG_DEL_BP 10
+#define MSG_ADD_WATCH 11
 
 struct pt_regs
 {
@@ -70,7 +71,7 @@ class DisassView : public QAbstractScrollArea
     QList<uint32_t> bpList_;
 
   signals:
-    void msg_cpu_sig(uint32_t addr);
+    void msg_cpu_jump_sig(uint32_t addr);
     // void msg_add_bp_sig(uint32_t addr);
     // void msg_del_bp_sig(uint32_t addr);
 
@@ -140,7 +141,8 @@ class DumpView : public QAbstractScrollArea
     uint8_t data[0x400];
 
   signals:
-    void msg_dump_sig(uint32_t addr);
+    void msg_dump_jump_sig(uint32_t addr);
+    void msg_dump_addWatch_sig(uint32_t addr);
 
   private:
     int fontWidth_ = 0;

@@ -46,8 +46,9 @@ class MainWindow : public QMainWindow
 
     void socketClose();
 
-    void msg_cpu_slot(uint32_t addr);
-    void msg_dump_slot(uint32_t addr);
+    void msg_cpu_jump_slot(uint32_t addr);
+    void msg_dump_jump_slot(uint32_t addr);
+    void msg_dump_addWatch_slot(uint32_t addr);
 
     void msg_step_slot();
     void msg_bp_slot();

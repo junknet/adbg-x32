@@ -109,9 +109,9 @@ void DisassView::setCurrentPc(uint32_t addr)
     {
         // logd("start: 0x{:x}", insn[0].address);
         // logd("end: 0x{:x}", insn[count - 1].address);
-        if (pcValue_ < insn[0].address || pcValue_ > insn[count - 1].address)
+        if (pcValue_ < screenStartAddr || pcValue_ > screenEndAddr)
         {
-            emit msg_cpu_sig(addr);
+            emit msg_cpu_jump_sig(addr);
             logd("msg_cpu_sig: 0x{:x}", addr);
         }
     }
@@ -342,7 +342,7 @@ void DisassView::resizeEvent(QResizeEvent *)
 void DisassView::jumpTo(uint32_t addr)
 {
     jump_addr_ = addr & (~1);
-    emit msg_cpu_sig(jump_addr_);
+    emit msg_cpu_jump_sig(jump_addr_);
 }
 
 DumpView::DumpView(QWidget *parent) : QAbstractScrollArea()
@@ -429,7 +429,18 @@ void DumpView::keyPressEvent(QKeyEvent *event)
             qDebug() << "addr toUInt error!";
             return;
         }
-        emit msg_dump_sig(addr);
+        emit msg_dump_jump_sig(addr);
+    }
+    else if (key == Qt::Key_B)
+    {
+        auto text = QInputDialog::getText(this, "add watch", "");
+        uint32_t addr = text.toUInt(nullptr, 16);
+        if (!addr)
+        {
+            qDebug() << "addr toUInt error!";
+            return;
+        }
+        emit msg_dump_addWatch_sig(addr);
     }
 }
 void DumpView::setDebugFlag(bool flag)

@@ -48,8 +48,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     ui->tabWidget->setCurrentIndex(0);
 
-    connect(disassView, SIGNAL(msg_cpu_sig(uint32_t)), this, SLOT(msg_cpu_slot(uint32_t)));
-    connect(dumpView, SIGNAL(msg_dump_sig(uint32_t)), this, SLOT(msg_dump_slot(uint32_t)));
+    connect(disassView, SIGNAL(msg_cpu_jump_sig(uint32_t)), this, SLOT(msg_cpu_jump_slot(uint32_t)));
+    connect(dumpView, SIGNAL(msg_dump_jump_sig(uint32_t)), this, SLOT(msg_dump_jump_slot(uint32_t)));
+    connect(dumpView, SIGNAL(msg_dump_addWatch_sig(uint32_t)), this, SLOT(msg_dump_addWatch_slot(uint32_t)));
 
     QShortcut *step_button = new QShortcut(this);
     step_button->setKey(tr("f3"));
@@ -117,16 +118,23 @@ void MainWindow::msg_step_slot()
     socketClient_->write(msgBuff_, 1);
 }
 
-void MainWindow::msg_cpu_slot(uint32_t addr)
+void MainWindow::msg_cpu_jump_slot(uint32_t addr)
 {
     msgBuff_[0] = MSG_CPU;
     *(uint32_t *)(msgBuff_ + 1) = addr;
     socketClient_->write(msgBuff_, 5);
 }
 
-void MainWindow::msg_dump_slot(uint32_t addr)
+void MainWindow::msg_dump_jump_slot(uint32_t addr)
 {
     msgBuff_[0] = MSG_DUMP;
+    *(uint32_t *)(msgBuff_ + 1) = addr;
+    socketClient_->write(msgBuff_, 5);
+}
+
+void MainWindow::msg_dump_addWatch_slot(uint32_t addr)
+{
+    msgBuff_[0] = MSG_ADD_WATCH;
     *(uint32_t *)(msgBuff_ + 1) = addr;
     socketClient_->write(msgBuff_, 5);
 }
