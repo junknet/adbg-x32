@@ -83,7 +83,7 @@ void MainWindow::on_actionopen_triggered()
         return;
     }
     //  set debug target process name
-    socketClient_->write("com.example.jnitest");
+    socketClient_->write("com.taobao.taobao");
 
     connect(socketClient_, SIGNAL(readyRead()), this, SLOT(socketHandle()));
     connect(socketClient_, SIGNAL(disconnected()), this, SLOT(socketClose()));
