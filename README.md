@@ -165,3 +165,8 @@
                                                 0x43e8 0x3e5d   0x3e66 0x461c   0x4628 0x1154 libc@free libc@free libc@free 
                                 0x447c 0x1154 libc@free libc@free libc@free@plt-unkown pc: 0x1bba next: 0xb48502e1 
 ```
+
+
+# NOTE:
+弃坑 
+开发64位中
